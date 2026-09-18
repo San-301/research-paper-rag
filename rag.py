@@ -259,6 +259,57 @@ def process_pdf(pdf_path):
 # ============================================================
 
 def ask_question(question, rag_data):
+    question_lower = question.lower().strip()
+
+    broad_questions = [
+        "explain the report",
+        "explain this report",
+        "explain about the report",
+        "explain the paper",
+        "explain this paper",
+        "explain about the paper",
+        "summarize the report",
+        "summarize this report",
+        "summarize the paper",
+        "give me a summary",
+        "what is this paper about",
+        "what is the paper about",
+        "overview of the paper",
+        "give an overview"
+    ]
+
+    # --------------------------------------------------------
+    # BROAD DOCUMENT QUESTION
+    # --------------------------------------------------------
+
+    if any(q in question_lower for q in broad_questions):
+
+        chunks = rag_data["chunks"]
+
+        # Select representative chunks from the entire paper
+        max_chunks = 15
+
+        if len(chunks) <= max_chunks:
+            selected_chunks = chunks
+        else:
+            step = len(chunks) / max_chunks
+
+            selected_chunks = [
+                chunks[int(i * step)]
+                for i in range(max_chunks)
+            ]
+
+        answer = generate_document_overview(
+            question,
+            selected_chunks
+        )
+
+        return answer, selected_chunks
+
+    # --------------------------------------------------------
+    # NORMAL QUESTION
+    # --------------------------------------------------------
+
     retrieved_chunks = retrieve_chunks(
         question,
         rag_data["index"],
@@ -270,5 +321,60 @@ def ask_question(question, rag_data):
         question,
         retrieved_chunks
     )
+def generate_document_overview(question, selected_chunks):
+    client = get_gemini_client()
 
+    context = build_context(selected_chunks)
+
+    prompt = f"""
+You are a Research Paper Question Answering Assistant.
+
+The user wants an overall explanation of the research paper.
+
+Use ONLY the provided research-paper context.
+
+Explain the paper in a structured and beginner-friendly way.
+
+Cover these points when the information is available:
+
+1. What the paper is about
+2. Main problem being addressed
+3. Objective of the research
+4. Methodology / approach
+5. Important techniques or models used
+6. Dataset or experimental setup
+7. Main results / findings
+8. Limitations
+9. Overall conclusion
+
+Important rules:
+
+- Do not invent information.
+- Do not use outside knowledge.
+- If a particular detail is not present in the provided context,
+  do not make it up.
+- Cite page numbers for important statements.
+- Keep the explanation understandable for a college student.
+- Organize the answer using headings and bullet points.
+
+Research Paper Context:
+-----------------------
+
+{context}
+
+-----------------------
+
+User Question:
+{question}
+
+Answer:
+"""
+
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt
+    )
+
+    return response.text
+    
     return answer, retrieved_chunks
